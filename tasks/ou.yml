@@ -1,0 +1,8 @@
+---
+
+- name: create Organization Units
+  win_dsc:
+    resource_name: xADOrganizationalUnit
+    Name: "{{ item.name }}"
+    Path: "{{ item.path }}"
+  loop: "{{ ad_organizational_units }}"

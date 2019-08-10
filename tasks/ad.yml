@@ -1,0 +1,66 @@
+---
+- name: Install DNS with sub features and management tools
+  win_feature:
+    name: DNS
+    state: present
+    include_sub_features: true
+    include_management_tools: true
+
+- name: install NetworkingDsc powershell module
+  win_psmodule:
+    name: NetworkingDsc
+    state: present
+
+- name: Disable ipv6 on all interfaces
+  win_dsc:
+    resource_name: NetAdapterBinding
+    InterfaceAlias: "{{ item.connection_name }}"
+    ComponentId: 'ms_tcpip6'
+    State: 'Disabled'
+  loop: "{{ ansible_interfaces }}"
+
+- name: Install Active Directory Domain Services
+  win_feature:
+    name: AD-Domain-Services
+    state: present
+    include_sub_features: true
+    include_management_tools: true
+
+- name: install xActiveDirectory powershell module
+  win_psmodule:
+    name: xActiveDirectory
+    state: present
+
+- name: require password for administrator
+  win_command: net user Administrator /passwordreq:yes
+  changed_when: false
+
+- name: Configure all adapters to use localhost DNS server
+  win_dns_client:
+    adapter_names: "{{ item.connection_name }}"
+    ipv4_addresses: "127.0.0.1"
+  loop: "{{ ansible_interfaces }}"
+
+- name: Setup new AD Forest & Domain
+  win_dsc:
+    resource_name: xADDomain
+    DomainName: "{{ ad_domain_name }}"
+    DomainNetbiosName: "{{ ad_domain_netbios_name }}"
+    DomainAdministratorCredential_username: "{{ ad_domain_netbios_name }}\\administrator"
+    DomainAdministratorCredential_password: "{{ ad_admin_password }}"
+    SafemodeAdministratorPassword_username: "{{ ad_domain_netbios_name }}\\administrator"
+    SafemodeAdministratorPassword_password: "{{ ad_admin_password }}"
+    ForestMode: "{{ ad_forest_mode }}"
+    DatabasePath: "{{ ad_database_path }}"
+    LogPath: "{{ ad_log_path }}"
+    SysvolPath: "{{ ad_sysvol_path }}"
+  register: win_dsc_xADDomain
+
+- name: Reboot after dcpromo
+  win_reboot:
+  when: win_dsc_xADDomain.reboot_required
+
+- name: Wait for AD to be available
+  win_dsc:
+    resource_name: xWaitForADDomain
+    DomainName: "{{ ad_domain_name }}"

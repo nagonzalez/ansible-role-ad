@@ -1,0 +1,14 @@
+---
+
+- name: add users
+  win_dsc:
+    resource_name: xADUser
+    Ensure: Present
+    UserName: "{{ item.username }}"
+    UserPrincipalName: "{{ item.username }}@{{ ad_domain_name }}"
+    Password_username: "{{ item.username }}"
+    Password_password: "{{ ad_users_default_pasword }}"
+    PasswordNeverExpires: true
+    DomainName: "{{ ad_domain_name }}"
+    Path: "{{ item.path }}"
+  with_items: "{{ ad_users }}"

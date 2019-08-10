@@ -1,0 +1,13 @@
+---
+
+# active direcoty plays
+- include: ad.yml
+
+# Organizational Units
+- include: ou.yml
+
+# Users
+- include: user.yml
+
+# LDAPS
+- include: ldaps.yml

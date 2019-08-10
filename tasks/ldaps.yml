@@ -1,0 +1,76 @@
+---
+- name: copy over root CA cert & key
+  template:
+    src: "{{ item }}"
+    dest: "C:/{{ item }}"
+  loop:
+    - ca.crt
+    - ca.key
+
+- name: install rootCA to trusted root ca store
+  win_certificate_store:
+    path: 'c:/ca.crt'
+    state: present
+    store_location: LocalMachine
+    store_name: Root
+
+- name: create certificate request definition
+  template:
+    src: request.inf.j2
+    dest: c:\request.inf
+
+- name: create a new client certificate request
+  win_command: certreq -new request.inf client.csr
+  args:
+    chdir: 'c:\'
+    creates: 'c:\client.csr'
+
+- name: add v3 extensions
+  win_copy:
+    src: v3ext.txt
+    dest: 'c:\v3ext.txt'
+
+- name: "Check for existing chocolatey install."
+  win_stat:
+    path: "c:/ProgramData/chocolatey/choco.exe"
+  register: chocolatey_exe
+
+- name: "Install latest Chocolatey."
+  win_shell: "iex ((New-Object System.Net.WebClient).DownloadString('https://chocolatey.org/install.ps1'))"
+  when:
+    - chocolatey_exe.stat.exists is defined
+    - not chocolatey_exe.stat.exists
+
+- name: Install openssl
+  win_chocolatey:
+    name: openssl.light
+    state: present
+
+- name: create cert from csr
+  win_command: >
+    openssl x509
+    -req -days 3650
+    -in client.csr
+    -CA ca.crt
+    -CAkey ca.key
+    -extfile v3ext.txt
+    -set_serial 01
+    -out client.crt
+  args:
+    chdir: 'c:\'
+    creates: 'c:\client.crt'
+  register: ldaps_cert
+
+- name: Verify generated certificate
+  win_command: openssl x509 -in client.crt -text
+  args:
+    chdir: 'c:\'
+  changed_when: false
+
+- name: Accept and import certificate
+  win_command: certreq -accept client.crt
+  args:
+    chdir: 'c:\'
+  when: ldaps_cert.changed
+  tags:
+    - skip_ansible_lint
